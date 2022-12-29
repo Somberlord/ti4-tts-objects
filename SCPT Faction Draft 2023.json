@@ -1,0 +1,587 @@
+{
+  "SaveName": "",
+  "Date": "",
+  "VersionNumber": "",
+  "GameMode": "",
+  "GameType": "",
+  "GameComplexity": "",
+  "Tags": [],
+  "Gravity": 0.5,
+  "PlayArea": 0.5,
+  "Table": "",
+  "Sky": "",
+  "Note": "",
+  "TabStates": {},
+  "LuaScript": "",
+  "LuaScriptState": "",
+  "XmlUI": "",
+  "ObjectStates": [
+    {
+      "GUID": "72a186",
+      "Name": "Custom_Model",
+      "Transform": {
+        "posX": 0.0,
+        "posY": 1.0,
+        "posZ": 84.87048,
+        "rotX": 0.0,
+        "rotY": 270.001526,
+        "rotZ": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "scaleZ": 1.0
+      },
+      "Nickname": "SCPT Faction Draft 2023",
+      "Description": "Click \"Init\" to select random faction and deal 2 factions per player.\n\nDrop all faction on the sheet.\n\nChoose a slice setup, a random set of factions will be chosen\n\nCopy input to milty draft",
+      "GMNotes": "",
+      "AltLookAngle": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "ColorDiffuse": {
+        "r": 1.0,
+        "g": 1.0,
+        "b": 1.0
+      },
+      "LayoutGroupSortIndex": 0,
+      "Value": 0,
+      "Locked": true,
+      "Grid": false,
+      "Snap": false,
+      "IgnoreFoW": false,
+      "MeasureMovement": false,
+      "DragSelectable": true,
+      "Autoraise": true,
+      "Sticky": true,
+      "Tooltip": true,
+      "GridProjection": false,
+      "HideWhenFaceDown": false,
+      "Hands": true,
+      "CustomMesh": {
+        "MeshURL": "http://cloud-3.steamusercontent.com/ugc/1815489385084578882/C71B25A5B2AE6905BB0B534E5D2071DAF853C77A/",
+        "DiffuseURL": "http://cloud-3.steamusercontent.com/ugc/5088536233430837885/5FE2003A7804F1E102C135CAA494969B06159626/",
+        "NormalURL": "",
+        "ColliderURL": "",
+        "Convex": true,
+        "MaterialIndex": 3,
+        "TypeIndex": 0,
+        "CustomShader": {
+          "SpecularColor": {
+            "r": 1.0,
+            "g": 1.0,
+            "b": 1.0
+          },
+          "SpecularIntensity": 0.0,
+          "SpecularSharpness": 2.0,
+          "FresnelStrength": 0.0
+        },
+        "CastShadows": true
+      },
+      "LuaScript": "--- New faction pool draft style.\r\n-- Authors: SCPT Matt, SCPT Hunter\r\n-- Script: Darrell, Somberlord\r\n\r\n-------------------------------------------------------------------------------\r\n\r\nfunction getHelperClient(helperObjectName)\r\n    local function getHelperObject()\r\n        for _, object in ipairs(getAllObjects()) do\r\n            if object.getName() == helperObjectName then return object end\r\n        end\r\n        error('missing object \"' .. helperObjectName .. '\"')\r\n    end\r\n    local helperObject = false\r\n    local function getCallWrapper(functionName)\r\n        helperObject = helperObject or getHelperObject()\r\n        if not helperObject.getVar(functionName) then error('missing ' .. helperObjectName .. '.' .. functionName) end\r\n        return function(parameters) return helperObject.call(functionName, parameters) end\r\n    end\r\n    return setmetatable({}, { __index = function(t, k) return getCallWrapper(k) end })\r\nend\r\n\r\nlocal function copyTable(t)\r\n    if t and type(t) == 'table' then\r\n        local copy = {}\r\n        for k, v in pairs(t) do\r\n            copy[k] = type(v) == 'table' and copyTable(v) or v\r\n        end\r\n        t = copy\r\n    end\r\n    return t\r\nend\r\n\r\nlocal _buttonHelper = getHelperClient('TI4_BUTTON_HELPER')\r\nlocal _gameDataHelper = getHelperClient('TI4_GAME_DATA_HELPER')\r\nlocal _factionHelper = getHelperClient('TI4_FACTION_HELPER')\r\nlocal _setupHelper = getHelperClient('TI4_SETUP_HELPER')\r\nlocal _systemHelper = getHelperClient('TI4_SYSTEM_HELPER')\r\nlocal _zoneHelper = getHelperClient('TI4_ZONE_HELPER')\r\n\r\n-------------------------------------------------------------------------------\r\n\r\nlocal PRESET_INPUTS = {\r\n    ['SCPT 2021 Invitation'] = \"slices=66,34,47,62,41|29,67,48,22,61|65,69,39,20,80|35,45,26,19,78|73,40,21,60,68|23,63,79,49,37|72,42,59,77,25|64,76,24,46,44&labels=Gravity's Hope's End|Feelin' Lucky Punk?|Intolerable Cruelty|Lump a Coal|Children at Play.|Highway to Meercatol|Gotcha Sumthin|Rigel Rocks\",\r\n\t['SCPT 2023 Qualifier'] = \"slices=21,66,69,40,80|30,63,46,67,61|65,47,59,39,36|35,78,42,26,72|27,23,48,79,62|45,75,24,64,50|31,37,49,25,41&labels=No Country for Hope's End|Vorhallywood|More-d'Or|Lirta IV : The Voyage Home|Synecdoche, New Albion|Three Little Devils|Gravity's Blindside\",\r\n    --['SCPT 2022 Test'] = \"clock=28800&slices=66,34,47,62,41|29,67,48,22,61|65,69,39,20,80|35,45,26,19,78|73,40,21,60,68|23,63,79,49,37|72,42,59,77,25|64,76,24,46,44&labels=Gravity's Hope's End|Feelin' Lucky Punk?|Intolerable Cruelty|Lump a Coal|Children at Play.|Highway to Meercatol|Gotcha Sumthin|Rigel Rocks&factions=sets:SCPT2022\",\r\n}\r\n\r\nlocal CHOSEN_SLICES = \"\"\r\n\r\n-- Specify \"&factions=sets:SCPT2022\" to choose from predefined sets.\r\nlocal FACTION_SETS = {\r\n    ['SCPT2022'] = {\r\n        \"Arborec|Argent|Creuss|Empyrean|Hacan|Jol-Nar|L1Z1X|Letnev\",\r\n        \"Arborec|Argent|Creuss|Empyrean|Hacan|Jol-Nar|L1Z1X|Letnev\",\r\n        \"Arborec|Argent|Creuss|Empyrean|Hacan|Jol-Nar|L1Z1X|Letnev\",\r\n        \"Arborec|Argent|Creuss|Empyrean|Hacan|Jol-Nar|L1Z1X|Letnev\",\r\n    }\r\n}\r\n\r\n_config = {\r\n    DEFAULT_SLICES = 7,\r\n    DEFAULT_FACTIONS = 9,\r\n\r\n    MIN_SLICES = 6,\r\n    MAX_SLICES = 9,\r\n\r\n    MIN_FACTIONS = 6,\r\n    MAX_FACTIONS = 12,\r\n}\r\n\r\n_state = false\r\n_lastScale = false\r\n\r\nlocal BUTTONS = {\r\n    {\r\n        id = 'initDraft',\r\n        label = 'Init Draft',\r\n        onClick = 'initDraft',\r\n        tooltip = 'Init SCPT Draft',\r\n\t\tconfirm = true\r\n    },\r\n    {\r\n        label = 'Common faction'\r\n    },\r\n    {\r\n        id = 'setupQualifier2023',\r\n        label = 'SCPT 2023\\n Qualifiers',\r\n        onClick = 'setupQualifier2023',\r\n        confirm = true,\r\n    },\r\n    {\r\n        id = 'setupPrelim2023',\r\n        label = 'SCPT 2023\\n Prelims',\r\n    },\r\n    {\r\n        id = 'setupSemi2023',\r\n        label = 'SCPT 2023\\n Semis',\r\n    },\r\n    {\r\n        id = 'setupCustom',\r\n        label = 'Setup with\\nCustom slices',\r\n        tooltip = 'Setup with custom slices. (right click > input slices)',\r\n        onClick = 'setupCustom',\r\n        confirm = true,\r\n    }\r\n}\r\n\r\nlocal LABEL_COLORS = {\r\n    Color.Red,\r\n    Color.Green,\r\n    Color.Orange,\r\n    Color.Pink,\r\n    Color.Yellow,\r\n    Color.Purple,\r\n    Color.Blue,\r\n    Color.White,\r\n    Color.Teal,\r\n}\r\n\r\n-- Expose a function for outside tools to set custom setups.\r\nfunction setCustomString(customString)\r\n    assert(type(customString) == 'string')\r\n    if not CustomSetup.isInputVisible() then\r\n        CustomSetup.showInput()\r\n    end\r\n    CustomSetup.setInputValue(customString)\r\nend\r\n\r\nfunction onLoad(saveState)\r\n    math.randomseed(os.time())\r\n\r\n    _state = {}\r\n    if saveState and string.len(saveState) > 0 then\r\n        _state = JSON.decode(saveState) or _state\r\n    end\r\n    _state.numSlices = _state.numSlices or _config.DEFAULT_SLICES\r\n    _state.numFactions = _state.numFactions or _config.DEFAULT_FACTIONS\r\n\r\n    self.clearButtons()\r\n    for i, button in ipairs(BUTTONS) do\r\n        self.createButton({\r\n            click_function = button.onClick or 'doNothing',\r\n            function_owner = self,\r\n            label          = button.label,\r\n            position       = Slots.getPosition(0, i - 1, Slots.DRAFT_MAT),\r\n            rotation       = { x = 0, y = 0, z = 0 },\r\n            scale          = { x = 1, y = 1, z = 1 },\r\n            width          = button.onClick and 1900 or 0,\r\n            height         = button.onClick and 1200 or 0,\r\n            font_size      = 240,\r\n            font_color     = button.onClick and 'Black' or 'White',\r\n            tooltip        = button.tooltip,\r\n        })\r\n        if button.confirm then\r\n            _buttonHelper.addConfirmStep({\r\n                guid = self.getGUID(),\r\n                buttonIndex = i - 1,\r\n                confirm = {\r\n                    label = 'CLICK AGAIN\\nTO CONFIRM',\r\n                }\r\n            })\r\n        end\r\n    end\r\n\r\n    local snapPoints = {}\r\n    local lines = {}\r\n    local color = { r = 1, g = 1, b = 1, a = 0.1 }\r\n    for col = 0, 0 do\r\n        for row = 0, 5 do\r\n            table.insert(lines, Slots.getVectorLine(col, row, Slots.DRAFT_MAT, color))\r\n        end\r\n    end\r\n    for row = 0, 6 do\r\n        for col = 0, 6 do\r\n\t\t\tif (col == 0 and row == 1) -- common faction\r\n\t\t\t    or (col > 0 and (\r\n\t\t\t\t\trow < 2 -- 2 first rows\r\n\t\t\t\t\tor row > 3)) -- 2 last rows\r\n\t\t\tthen\r\n\t\t\t\ttable.insert(snapPoints, {\r\n\t\t\t\t\tposition = Slots.getPosition(6 - col, row, Slots.DRAFT_MAT),\r\n\t\t\t\t\trotation = { x = 0, y = 0, z = 0 },\r\n\t\t\t\t\trotation_snap = true,\r\n\t\t\t\t})\r\n\t\t\tend\r\n        end\r\n    end\r\n    self.setSnapPoints(snapPoints)\r\n    self.setVectorLines(lines)\r\n\r\n    local function lookAtMe(playerColor)\r\n        Player[playerColor].lookAt({\r\n            position = self.getPosition(),\r\n            pitch    = 90,\r\n            yaw      = self.getRotation().y + 180,\r\n            distance = 30\r\n        })\r\n    end\r\n    self.addContextMenuItem('Look at me', lookAtMe)\r\n    self.addContextMenuItem('Input slices', CustomSetup.toggleInput)\r\n\r\nend\r\n\r\nfunction onSave()\r\n    return _state and JSON.encode(_state)\r\nend\r\n\r\n\r\nfunction _getByName(tag, name)\r\n    for _, object in ipairs(getAllObjects()) do\r\n        if object.tag == tag and object.getName() == name then\r\n            return object\r\n        end\r\n    end\r\n    return false\r\nend\r\n\r\n\r\n-------------------------------------------------------------------------------\r\n\r\nfunction initDraft()\r\n    startLuaCoroutine(self, 'setupCoroutine')\r\nend\r\n\r\nfunction setupQualifier2023()\r\n\tCHOSEN_SLICES = PRESET_INPUTS['SCPT 2023 Qualifier']\r\n    doFinish()\r\nend\r\n\r\nfunction setupCustom()\r\n\tif CustomSetup.isInputVisible() then\r\n\t\tdoFinish()\r\n\telse \r\n\t\tbroadcastToAll('Enter custom slices before finishing custom Setup', 'Red')\r\n\tend\r\nend\r\n\r\nfunction doFinish()\r\n    startLuaCoroutine(self, 'finishCoroutine')\r\nend\r\n\r\nfunction doReset()\r\n    startLuaCoroutine(self, 'resetCoroutine')\r\nend\r\n\r\n-------------------------------------------------------------------------------\r\n\r\nfunction setupCoroutine()\r\n    if _getByName('Generic', 'Game Setup Options') or (not _setupHelper.getPoK()) then\r\n        broadcastToAll('Please do setup with PoK enabled first', 'Red')\r\n        return 1\r\n    end\r\n    coroutine.yield(0)\r\n\r\n    self.setRotation({ x = 0, y = self.getRotation().y, z = 0 })\r\n    self.setLock(true)\r\n\r\n    FactionTokens.stow()\r\n    coroutine.yield(0)\r\n\r\n\r\n    -- Randomize turns (apply at end).\r\n    local order = {}\r\n    for _, color in ipairs(_zoneHelper.zones()) do\r\n        table.insert(order, color)\r\n    end\r\n    order = assert(VolverMilty.permute(order))\r\n\r\n    -- Optionally override slices with manually-entered \"slice string\".\r\n    local factionNames = FactionTokens.randomFactionNames(1)\r\n    local mapString = false\r\n\r\n\r\n    -- Add draft factions.\r\n    for i, factionName in ipairs(factionNames) do\r\n        local position = Position.placeCommonFaction()\r\n        local token = FactionTokens.placeToken(factionName, position, self.getRotation())\r\n\t\tFactionTokens.dealToAll(2)\r\n        coroutine.yield(0)\r\n    end\r\n    coroutine.yield(0)\r\n\r\n\r\n    Turns.enable = false\r\n    Turns.type = 2\r\n    Turns.reverse_order = false\r\n    Turns.order = order\r\n    Turns.turn_color = order[1]\r\n    Turns.enable = true\r\n    printToAll('Draft order: ' .. table.concat(order, ', '), 'Yellow')\r\n\t\r\n\t    -- Start timer.\r\n\t_state.clock=28800 -- 8h ?\r\n    if _state.clock then\r\n        assert(type(_state.clock) == 'number')\r\n        local clock = false\r\n        for _, object in ipairs(getAllObjects()) do\r\n            if object.tag == 'Clock' then\r\n                clock = object\r\n            end\r\n        end\r\n        if clock then\r\n            clock.setLock(true)\r\n            clock.Clock.setValue(_state.clock) \r\n            clock.Clock.pauseStart()\r\n            broadcastToAll('Starting clock', 'Yellow')\r\n        end\r\n    end\r\n    coroutine.yield(0)\r\n\r\n    return 1\r\nend\r\n\r\nfunction finishCoroutine()\r\n    if not _setupHelper.getPoK() then\r\n        broadcastToAll('SCPT draft: please do setup with PoK enabled first', 'Red')\r\n        return 1\r\n    end\r\n\r\n\tlocal selectedZone = math.random(1, 4)\r\n\tlocal position = PoolZones.getCenter(selectedZone)\r\n\tlocal commonFactionPosition = PoolZones.getCommonFactionPosition()\r\n\tlocal allFactionTokenNames = {}\r\n    for _, object in ipairs(FactionTokens.getAll(true)) do\r\n        local factionTokenName = string.match(object.getName(), '^(.*) Faction Token$')\r\n        table.insert(allFactionTokenNames, factionTokenName)\r\n    end\r\n    coroutine.yield(0)\r\n\r\n\tlocal factionList = \"\"\r\n\r\n    for _, object in ipairs(FactionTokens.getAll(true)) do\r\n\t\tlocal cardName = object.getName()\r\n\t\tlocal factionName = string.match(cardName, '^(.*) Faction Token*')\r\n        assert(_factionHelper.fromTokenName(factionName))\r\n\t\tlocal objectPosition = self.positionToLocal(object.getPosition())\r\n\t\tlocal dist = Vector.distance(objectPosition, position)\r\n\t\tlocal distCommon = Vector.distance(objectPosition, commonFactionPosition)\r\n\t\tif dist < 5.0 or distCommon < 1.0 then\r\n\t\t\tprintToAll(\"Chosen Faction : \" .. factionName)\r\n\t\t\tlocal faction = _factionHelper.fromTokenName(factionName)\r\n\t\t\tif string.len(factionList) > 0 then factionList = factionList .. '|' end\r\n\t\t\tfactionList = factionList .. faction.tokenName\r\n\t\tend\r\n    end\r\n\t\r\n\tcoroutine.yield(0)\r\n\t\r\n\tfactionList = \"&factions=\" .. factionList\r\n\tlocal completeUrl = CHOSEN_SLICES .. factionList\r\n\tcoroutine.yield(0)\r\n\tif not CustomSetup.isInputVisible() then\r\n        CustomSetup.showInput()\r\n\t\tCustomSetup.setInputValue(completeUrl)\r\n    else\r\n\t\tlocal customSlices = CustomSetup.getInputValue()\r\n\t\tcompleteUrl = customSlices .. factionList\r\n\t\tCustomSetup.setInputValue(completeUrl)\r\n    end\r\n \r\n\tcoroutine.yield(0)\r\n\r\n\tlocal miltypos = self.getPosition()\r\n\tlocal miltyrot = self.getRotation()\r\n\r\n    -- Stow self.\r\n    local toolsBag = _getByName('Bag', 'Tools and Helpers')\r\n    if toolsBag then\r\n        self.setLock(false)\r\n        toolsBag.putObject(self)\r\n    end\r\n\tcoroutine.yield(0)\r\n\tlocal miltyName = 'Milty Draft Tool'\r\n\tlocal miltyBoard = _getByName('Generic', miltyName)\r\n\tlocal miltySpawned = true\r\n\tif miltyBoard then\r\n\t\tmiltySpawned = false\r\n\telseif toolsBag then\r\n\t\tfor i, entry in ipairs(toolsBag.getObjects()) do\r\n\t\t\tif entry.name == miltyName then\r\n\t\t\t\tmiltyBoard = toolsBag.takeObject({\r\n\t\t\t\t\tindex             = entry.index,\r\n\t\t\t\t\tposition          = miltypos,\r\n\t\t\t\t\trotation          = miltyrot,\r\n\t\t\t\t})\r\n\t\t\tend\r\n\t\tend\r\n    end\r\n\t\r\n\tif miltySpawned then\r\n\t\tmiltyBoard.setLock(false)\r\n\t\tmiltyBoard.setRotation(miltyrot)\r\n\t\tmiltyBoard.setLock(true)\r\n\tend\r\n\tcoroutine.yield(0)\r\n\tmiltyBoard.call('setCustomString',completeUrl)\r\n\tcoroutine.yield(0)\t\r\n\tcoroutine.yield(0)\t\r\n\tcoroutine.yield(0)\t\r\n\tcoroutine.yield(0)\t\r\n\tmiltyBoard.call('doSetup')\r\n\r\n\r\n    -- Track game type.\r\n    _gameDataHelper.addExtraData({\r\n        name = 'Scpt2023Draft',\r\n        value = true\r\n    })\r\n\r\n    return 1\r\nend\r\n\r\n\r\n\r\nfunction resetCoroutine()\r\n    resetButtons()\r\n    coroutine.yield(0)\r\n\r\n    FactionTokens.stow()\r\n    coroutine.yield(0)\r\n\r\n\r\n    return 1\r\nend\r\n\r\n-------------------------------------------------------------------------------\r\n\r\nBoundingBox = {\r\n    _bb = false\r\n}\r\n\r\nfunction BoundingBox.get(object)\r\n    local bounds = object.getBounds()\r\n    return {\r\n        min = {\r\n            x = bounds.center.x - bounds.size.x / 2,\r\n            z = bounds.center.z - bounds.size.z / 2,\r\n        },\r\n        max = {\r\n            x = bounds.center.x + bounds.size.x / 2,\r\n            z = bounds.center.z + bounds.size.z / 2,\r\n        },\r\n    }\r\nend\r\n\r\nfunction BoundingBox.insideWorld(object, bb)\r\n    local p = self.positionToLocal(object.getPosition())\r\n    return p.x > bb.min.x and p.x < bb.max.x and p.z > bb.min.z and p.z < bb.max.z\r\nend\r\n\r\n\r\nfunction BoundingBox.inside(object, bb)\r\n    local p = object.getPosition()\r\n    return p.x > bb.min.x and p.x < bb.max.x and p.z > bb.min.z and p.z < bb.max.z\r\nend\r\n\r\nfunction BoundingBox.insideSelf(object)\r\n    BoundingBox._bb = BoundingBox._bb or BoundingBox.get(self)\r\n    return BoundingBox.inside(object, BoundingBox._bb)\r\nend\r\n\r\n-------------------------------------------------------------------------------\r\nPoolZones = {\r\n\tpools = {{\r\n\t\tx = 1,\r\n\t\tz = -1\r\n\t},{\r\n\t\tx = -1,\r\n\t\tz = -1\r\n\t},{\r\n\t\tx = 1,\r\n\t\tz = 1\r\n\t},{\r\n\t\tx = -1,\r\n\t\tz = 1\r\n\t}}\r\n}\r\n\r\nfunction PoolZones.getCommonFactionPosition()\r\n\treturn Vector(13.6,0.4,-4.8)\r\nend\r\n\r\nfunction PoolZones.getCenter(pool)\r\n\tlocal xOffset = 6.75\t-- manual values because maths are hard\r\n\tlocal zOffset = 6.4\r\n\tlocal pool = PoolZones.pools[pool]\r\n\t\r\n\tlocal finalPosition = Vector(\r\n\t\t(xOffset * pool.x) - 2.25,\r\n\t\t0.4,\r\n\t\tzOffset * pool.z\r\n\t)\r\n\treturn finalPosition\r\nend\r\n-------------------------------------------------------------------------------\r\n\r\nSlots = {\r\n    SIZE = {\r\n        x = 4.04,\r\n        z = 2.70,\r\n        gap = 0.5,\r\n    },\r\n    DRAFT_MAT = {\r\n        numCols = 7,\r\n        numRows = 6\r\n    },\r\n    SELECTION_MAT = {\r\n        numCols = 3,\r\n        numRows = 3\r\n    }\r\n}\r\n\r\nfunction Slots.getPosition(col, row, mat)\r\n    assert(type(col) == 'number' and type(row) == 'number' and type(mat) == 'table')\r\n    assert(type(mat.numCols) == 'number' and type(mat.numRows) == 'number')\r\n\r\n    -- Not safe to read bounds while spawning.\r\n    local bounds = {\r\n        x = (mat.numCols * Slots.SIZE.x) + ((mat.numCols + 1) * Slots.SIZE.gap),\r\n        y = 0.4,\r\n        z = (mat.numRows * Slots.SIZE.z) + ((mat.numRows + 1) * Slots.SIZE.gap),\r\n    }\r\n\r\n    local p0 = {\r\n        x = -(bounds.x / 2) + Slots.SIZE.gap + (Slots.SIZE.x / 2),\r\n        y = bounds.y + 0.01,\r\n        z = -(bounds.z / 2) + Slots.SIZE.gap + (Slots.SIZE.z / 2),\r\n    }\r\n\r\n    return {\r\n        x = p0.x + col * (Slots.SIZE.x + Slots.SIZE.gap),\r\n        y = p0.y,\r\n        z = p0.z + row * (Slots.SIZE.z + Slots.SIZE.gap),\r\n    }\r\nend\r\n\r\nfunction Slots.getVectorLine(col, row, mat, color, rowSpan)\r\n    assert(type(col) == 'number' and type(row) == 'number' and type(mat) == 'table')\r\n    assert(type(mat.numCols) == 'number' and type(mat.numRows) == 'number')\r\n\r\n    -- Vector lines have reversed X space?\r\n    local p1 = Slots.getPosition(col, row, mat)\r\n    local p2 = Slots.getPosition(col, row + ((rowSpan or 1) - 1), mat)\r\n    return {\r\n        points = {\r\n            { x = -p1.x, y = p1.y, z = p1.z - Slots.SIZE.z / 2 },\r\n            { x = -p2.x, y = p2.y, z = p2.z + Slots.SIZE.z / 2 },\r\n        },\r\n        rotation = { x = 0, y = 0, z = 0 },\r\n        thickness = Slots.SIZE.x,\r\n        color = color,\r\n        square = true,\r\n        loop = false,\r\n    }\r\nend\r\n\r\n-------------------------------------------------------------------------------\r\n\r\n-- Mat is 7x6.  COL/ROW in 0-based values:\r\n-- Col 0: buttons.\r\n-- Cols 1-3: slices, offset Z by 0.5.\r\n-- Cols 4-6:\r\n--   Rows 1-4: factions\r\n--   Rows 5-6: seats\r\nPosition = {\r\n    SLICE = {\r\n        col0 = 1,\r\n        row0 = 0.5,\r\n        numCols = 3\r\n    },\r\n    FACTION = {\r\n        col0 = 4,\r\n        row0 = 0,\r\n        numCols = 3\r\n    },\r\n    SEAT = {\r\n        col0 = 4,\r\n        row0 = 4,\r\n        numCols = 3\r\n    },\r\n}\r\n\r\nfunction Position._pos(col, row, mat)\r\n    local p = Slots.getPosition(col, row, mat)\r\n    p.x = -p.x  -- x backwards from local?\r\n    p = self.positionToWorld(p)\r\n    p.y = p.y + 3\r\n    return p\r\nend\r\n\r\n\r\n--- Place common faction\r\n-- @return table : {xyz} position.\r\nfunction Position.placeCommonFaction()\r\n    local col = 0\r\n    local row = 1\r\n    return Position._pos(col, row, Slots.DRAFT_MAT)\r\nend\r\n\r\n-------------------------------------------------------------------------------\r\n\r\n-- Tile allocation system that ensures players get balanced tile hand.\r\n-- Allocates tiles from three tiers, with minimum and maximum spends for resources/influence.\r\n-- @author Volverbot for design\r\n-- @author Milty for scripting and design\r\nVolverMilty = {\r\n\r\n}\r\n\r\n\r\nfunction VolverMilty.permute(list)\r\n    assert(type(list) == 'table')\r\n    local shuffled = {}\r\n    for i, v in ipairs(list) do\r\n        local j = math.random(1, #shuffled + 1)\r\n        table.insert(shuffled, j, v)\r\n    end\r\n    return shuffled\r\nend\r\n\r\nfunction VolverMilty.find(target, list) -- find element target's index in list\r\n    for _, v in ipairs(list) do\r\n      if v == target then\r\n        return _\r\n      end\r\n    end\r\n    return nil\r\nend\r\n\r\n-------------------------------------------------------------------------------\r\n\r\nFactionTokens = {\r\n    BAG_NAME = 'Pick a Faction to Play',\r\n    _bagGuid = false\r\n}\r\n\r\nfunction FactionTokens._getBag()\r\n    local bag = FactionTokens._bagGuid and getObjectFromGUID(FactionTokens._bagGuid)\r\n    if bag then\r\n        return bag\r\n    end\r\n    for _, object in ipairs(getAllObjects()) do\r\n        if object.tag == 'Bag' and object.getName() == FactionTokens.BAG_NAME then\r\n            FactionTokens._bagGuid = object.getGUID()\r\n            return object\r\n        end\r\n    end\r\n    error('FactionTokens._getBag: missing \"' .. FactionTokens.BAG_NAME .. '\"')\r\nend\r\n\r\nfunction FactionTokens.randomFactionNames(count)\r\n    assert(type(count) == 'number')\r\n    local candidates = {}\r\n    local bag = FactionTokens._getBag()\r\n    for _, entry in ipairs(bag.getObjects()) do\r\n        local factionName = string.match(entry.name, '^(.*) Faction Token*')\r\n        assert(_factionHelper.fromTokenName(factionName))\r\n        table.insert(candidates, factionName)\r\n    end\r\n\r\n    local result = {}\r\n    while #result < count do\r\n        local i = math.random(1, #candidates)\r\n        local factionName = table.remove(candidates, i)\r\n        table.insert(result, factionName)\r\n    end\r\n    return result\r\nend\r\n\r\nfunction FactionTokens.dealToAll(numberToDeal)\r\n\tlocal bag = FactionTokens._getBag()\r\n\tbag.shuffle()\r\n\tfor _, color in ipairs(_zoneHelper.zones()) do\r\n\t\tbag.deal(2, color)\r\n\tend\r\nend\r\n\r\nfunction FactionTokens.placeToken(factionName, position, rotation)\r\n    assert(type(factionName) == 'string')\r\n    local faction = assert(_factionHelper.fromTokenName(factionName))\r\n    local factionTokenName = faction.tokenName .. ' Faction Token'\r\n\r\n\tlocal finalRotation = Vector(rotation.x, rotation.y, 180)\r\n\r\n    local bag = FactionTokens._getBag()\r\n    for i, entry in ipairs(bag.getObjects()) do\r\n        if entry.name == factionTokenName then\r\n            local token = bag.takeObject({\r\n                index             = entry.index,\r\n                position          = position,\r\n                rotation          = finalRotation,\r\n                smooth            = true,\r\n\t\t\t\tflip\t\t\t  = true\r\n            })\r\n            return token\r\n        end\r\n    end\r\n    error('FactionTokens.placeToken: missing token \"' .. factionName .. '\"')\r\nend\r\n\r\nfunction FactionTokens.getAll(includeInsideSelf)\r\n    assert(type(includeInsideSelf) == 'boolean')\r\n    local nameSet = {}\r\n    for _, faction in pairs(_factionHelper.allFactions(true)) do\r\n        nameSet[faction.tokenName .. ' Faction Token'] = true\r\n    end\r\n    local result = {}\r\n    for _, object in ipairs(getAllObjects()) do\r\n        if object.tag == 'Card' and nameSet[object.getName()] then\r\n            if includeInsideSelf or (not BoundingBox.insideSelf(object)) then\r\n                table.insert(result, object)\r\n            end\r\n        end\r\n    end\r\n    return result\r\nend\r\n\r\nfunction FactionTokens.stow()\r\n    local bag = FactionTokens._getBag()\r\n    for _, object in ipairs(FactionTokens.getAll(true)) do\r\n        bag.putObject(object)\r\n        coroutine.yield(0) -- wait a moment to prevent deck from forming\r\n    end\r\nend\r\n\r\n-------------------------------------------------------------------------------\r\n\r\nfunction _selectFaction(color, factionTokenName)\r\n    assert(type(color) == 'string' and type(factionTokenName) == 'string')\r\n\r\n    local factionSelector = false\r\n    for _, object in ipairs(getAllObjects()) do\r\n        local name = object.getName()\r\n        if name == 'Faction Selector' then\r\n            local zone = _zoneHelper.zoneFromPosition(object.getPosition())\r\n            if zone == color then\r\n                factionSelector = object\r\n                break\r\n            end\r\n        end\r\n    end\r\n    assert(factionSelector, 'missing faction selector for ' .. color)\r\n\r\n    factionSelector.call('selectFaction', factionTokenName)\r\nend\r\n\r\n-------------------------------------------------------------------------------\r\n\r\nfunction _onCustomSetupInput()\r\nend\r\n\r\nCustomSetup = {}\r\n\r\nfunction CustomSetup.getInputValue(urlArg)\r\n    local index = assert(CustomSetup._getInputIndex())\r\n    local input = assert(self.getInputs()[index + 1]) -- index is 0 based, lua is 1\r\n    local value = assert(input.value)\r\n\r\n    -- If using url arg style, extract just the given url arg.\r\n    if urlArg then\r\n        value = string.match(value, urlArg .. '=([^&]*)')\r\n    end\r\n\r\n    return value\r\nend\r\n\r\nfunction CustomSetup._getInputIndex()\r\n    for _, input in ipairs(self.getInputs() or {}) do\r\n        if input.input_function == '_onCustomSetupInput' then\r\n            return input.index\r\n        end\r\n    end\r\nend\r\n\r\nfunction CustomSetup.setInputValue(value)\r\n    local index = assert(CustomSetup._getInputIndex())\r\n    local input = assert(self.getInputs()[index + 1]) -- index is 0 based, lua is 1\r\n    input.value = value\r\n    self.editInput(input)\r\nend\r\n\r\nfunction CustomSetup.toggleInput()\r\n    if CustomSetup.isInputVisible() then\r\n        CustomSetup.hideInput()\r\n    else\r\n        CustomSetup.showInput()\r\n    end\r\nend\r\n\r\nfunction CustomSetup.isInputVisible()\r\n    return CustomSetup._getInputIndex() and true or false\r\nend\r\n\r\nfunction CustomSetup.showInput()\r\n    assert(not CustomSetup.isInputVisible())\r\n    local hint = 'Enter slices as \"# # # # # | # # # # # | ...\" with [left, center, right, left equidistant, far] tile numbers for each slice, then click \"setup\"'\r\n    self.createInput({\r\n        input_function = '_onCustomSetupInput',\r\n        function_owner = self,\r\n        label          = hint,\r\n        alignment      = 2, -- left\r\n        position       = { x = 0, y = 0.41, z = 0 },\r\n        rotation       = { x = 0, y = 0, z = 0 },\r\n        scale          = { x = 1, y = 1, z = 1 },\r\n        width          = 7000,\r\n        height         = 3500,\r\n        font_size      = 400,\r\n        tooltip        = hint,\r\n        value          = nil, -- Show label as \"hint\"\r\n    })\r\nend\r\n\r\nfunction CustomSetup.hideInput()\r\n    assert(CustomSetup.isInputVisible())\r\n    local index = assert(CustomSetup._getInputIndex())\r\n    self.removeInput(index)\r\nend\r\n\r\n-------------------------------------------------------------------------------\r\n-- Index is only called when the key does not already exist.\r\nlocal _lockGlobalsMetaTable = {}\r\nfunction _lockGlobalsMetaTable.__index(table, key)\r\n    error('Accessing missing global \"' .. tostring(key or '<nil>') .. '\", typo?', 2)\r\nend\r\nfunction _lockGlobalsMetaTable.__newindex(table, key, value)\r\n    error('Globals are locked, cannot create global variable \"' .. tostring(key or '<nil>') .. '\"', 2)\r\nend\r\nsetmetatable(_G, _lockGlobalsMetaTable)\r\n\r\n\r\n",
+      "LuaScriptState": "{\"clock\":28800,\"numFactions\":9,\"numSlices\":7}",
+      "XmlUI": "",
+      "AttachedSnapPoints": [
+        {
+          "Position": {
+            "x": 9.08,
+            "y": 0.41,
+            "z": -8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 4.54,
+            "y": 0.41,
+            "z": -8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 0.0,
+            "y": 0.41,
+            "z": -8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -4.54,
+            "y": 0.41,
+            "z": -8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -9.08,
+            "y": 0.41,
+            "z": -8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -13.62,
+            "y": 0.41,
+            "z": -8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 13.62,
+            "y": 0.41,
+            "z": -4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 9.08,
+            "y": 0.41,
+            "z": -4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 4.54,
+            "y": 0.41,
+            "z": -4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 0.0,
+            "y": 0.41,
+            "z": -4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -4.54,
+            "y": 0.41,
+            "z": -4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -9.08,
+            "y": 0.41,
+            "z": -4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -13.62,
+            "y": 0.41,
+            "z": -4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 9.08,
+            "y": 0.41,
+            "z": 4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 4.54,
+            "y": 0.41,
+            "z": 4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 0.0,
+            "y": 0.41,
+            "z": 4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -4.54,
+            "y": 0.41,
+            "z": 4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -9.08,
+            "y": 0.41,
+            "z": 4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -13.62,
+            "y": 0.41,
+            "z": 4.8
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 9.08,
+            "y": 0.41,
+            "z": 8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 4.54,
+            "y": 0.41,
+            "z": 8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 0.0,
+            "y": 0.41,
+            "z": 8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -4.54,
+            "y": 0.41,
+            "z": 8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -9.08,
+            "y": 0.41,
+            "z": 8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -13.62,
+            "y": 0.41,
+            "z": 8.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 9.08,
+            "y": 0.41,
+            "z": 11.2
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 4.54,
+            "y": 0.41,
+            "z": 11.2
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": 0.0,
+            "y": 0.41,
+            "z": 11.2
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -4.54,
+            "y": 0.41,
+            "z": 11.2
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -9.08,
+            "y": 0.41,
+            "z": 11.2
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        },
+        {
+          "Position": {
+            "x": -13.62,
+            "y": 0.41,
+            "z": 11.2
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          }
+        }
+      ],
+      "AttachedVectorLines": [
+        {
+          "points3": [
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": -9.35
+            },
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": -6.65
+            }
+          ],
+          "color": {
+            "r": 1.0,
+            "g": 1.0,
+            "b": 1.0,
+            "a": 0.1
+          },
+          "thickness": 4.04
+        },
+        {
+          "points3": [
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": -6.15
+            },
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": -3.45
+            }
+          ],
+          "color": {
+            "r": 1.0,
+            "g": 1.0,
+            "b": 1.0,
+            "a": 0.1
+          },
+          "thickness": 4.04
+        },
+        {
+          "points3": [
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": -2.95
+            },
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": -0.25
+            }
+          ],
+          "color": {
+            "r": 1.0,
+            "g": 1.0,
+            "b": 1.0,
+            "a": 0.1
+          },
+          "thickness": 4.04
+        },
+        {
+          "points3": [
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": 0.25
+            },
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": 2.95
+            }
+          ],
+          "color": {
+            "r": 1.0,
+            "g": 1.0,
+            "b": 1.0,
+            "a": 0.1
+          },
+          "thickness": 4.04
+        },
+        {
+          "points3": [
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": 3.45
+            },
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": 6.15
+            }
+          ],
+          "color": {
+            "r": 1.0,
+            "g": 1.0,
+            "b": 1.0,
+            "a": 0.1
+          },
+          "thickness": 4.04
+        },
+        {
+          "points3": [
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": 6.65
+            },
+            {
+              "x": 13.62,
+              "y": 0.41,
+              "z": 9.35
+            }
+          ],
+          "color": {
+            "r": 1.0,
+            "g": 1.0,
+            "b": 1.0,
+            "a": 0.1
+          },
+          "thickness": 4.04
+        }
+      ]
+    }
+  ]
+}
